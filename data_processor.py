@@ -81,7 +81,7 @@ class DataProcessor:
                     for idx, person in tm_group.iterrows():
                         analysis_data.append({
                             '유입': inflow_type,
-                            '티엠결과': tm_result if tm_result != '' else '빈 값',
+                            '티엠결과': tm_result if tm_result != '' else '신규',
                             '이름': person.get('이름', '')
                         })
             
@@ -110,18 +110,18 @@ class DataProcessor:
             
             summary = f"📊 **데이터 요약**\n"
             summary += f"총 인원: {total_count}명\n\n"
-            summary += "**유입별 현황:**\n"
+            summary += "**구역별 현황:**\n"
             
             for inflow_type, count in inflow_counts.items():
                 percentage = (count / total_count) * 100
-                summary += f"• {inflow_type}: {count}명 ({percentage:.1f}%)\n"
+                summary += f"• {inflow_type}구역: {count}명 ({percentage:.1f}%)\n"
             
             # 티엠 결과별 현황
             tm_result_counts = df['티엠 결과'].value_counts()
             summary += "\n**티엠 결과별 현황:**\n"
             
             for tm_result, count in tm_result_counts.items():
-                display_result = "빈 값" if tm_result == '' else tm_result
+                display_result = "신규" if tm_result == '' else tm_result
                 percentage = (count / total_count) * 100
                 summary += f"• {display_result}: {count}명 ({percentage:.1f}%)\n"
             

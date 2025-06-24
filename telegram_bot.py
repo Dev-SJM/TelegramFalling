@@ -21,7 +21,7 @@ class TelegramBot:
         self.app.add_handler(CommandHandler("data", self.get_data_command))
         self.app.add_handler(CommandHandler("stats", self.get_stats_command))
         self.app.add_handler(CommandHandler("csv", self.get_csv_command))
-        self.app.add_handler(CommandHandler("TM", self.get_inflow_data_command))
+        self.app.add_handler(CommandHandler("tm", self.get_inflow_data_command))
     
     async def start_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """시작 명령어"""
@@ -33,7 +33,7 @@ class TelegramBot:
 • /data - 데이터 요약 정보 보기
 • /stats - 상세 통계 보기
 • /csv - CSV 파일 다운로드
-• /TM [유입명] - 특정 유입의 데이터만 보기
+• /tm [구역명] - 특정 구역의 데이터만 보기
 
 시작하려면 /data 명령어를 사용해보세요!
         """
@@ -49,16 +49,16 @@ class TelegramBot:
 🔹 **/data** - 기본 데이터 정보 및 요약
 🔹 **/stats** - 유입별, 티엠 결과별 상세 통계
 🔹 **/csv** - 분석된 데이터를 CSV 파일로 다운로드
-🔹 **/TM [유입명]** - 특정 유입의 데이터만 조회
+🔹 **/tm [구역명]** - 특정 구역의 데이터만 조회
 
 📝 **사용 예시:**
-• `/TM 1` - 유입이 '1구역'인 데이터만 조회
-• `/TM 2` - 유입이 '2구역'인 데이터만 조회
+• `/tm 1` - 유입이 '1구역'인 데이터만 조회
+• `/tm 2` - 유입이 '2구역'인 데이터만 조회
 
 ℹ️ **참고사항:**
 • 데이터는 Google Sheets에서 실시간으로 가져옵니다
 • 유입이 빈 값이거나 'J'인 데이터는 제외됩니다
-• 티엠 결과는 신규, '부재중/재티엠', '티엠 예약', '장기'만 포함됩니다
+• 티엠 결과는 '신규', '부재중/재티엠', '티엠 예약', '장기'로 분류됩니다
         """
         await update.message.reply_text(help_message, parse_mode=ParseMode.MARKDOWN)
     
@@ -99,11 +99,11 @@ class TelegramBot:
             inflow_groups = processed_df.groupby('유입')
             
             for inflow_type, inflow_group in inflow_groups:
-                stats_message += f"**【{inflow_type}】** ({len(inflow_group)}명)\n"
+                stats_message += f"**【{inflow_type}구역】** ({len(inflow_group)}명)\n"
                 
                 tm_result_groups = inflow_group.groupby('티엠 결과')
                 for tm_result, tm_group in tm_result_groups:
-                    display_result = "빈 값" if tm_result == '' else tm_result
+                    display_result = "신규" if tm_result == '' else tm_result
                     names = [name for name in tm_group['이름'].values if name.strip()]
                     
                     stats_message += f"  ▪️ {display_result}: {len(tm_group)}명\n"
@@ -167,7 +167,7 @@ class TelegramBot:
                 await update.message.reply_text(
                     "❌ 유입명을 입력해주세요.\n\n"
                     "사용법: `/TM [유입명]`\n"
-                    "예시: `/TM 1`",
+                    "예시: `/TM 1구역` 또는 `/TM 인스타그램`",
                     parse_mode=ParseMode.MARKDOWN
                 )
                 return
@@ -194,7 +194,7 @@ class TelegramBot:
                 available_list = "\n".join([f"• {inflow}" for inflow in available_inflows])
                 
                 await update.message.reply_text(
-                    f"❌ '{inflow_name}' 유입을 찾을 수 없습니다.\n\n"
+                    f"❌ '{inflow_name}구역' 유입을 찾을 수 없습니다.\n\n"
                     f"📋 **사용 가능한 유입 목록:**\n{available_list}",
                     parse_mode=ParseMode.MARKDOWN
                 )
@@ -205,32 +205,43 @@ class TelegramBot:
             result_message += f"총 인원: {len(inflow_df)}명\n\n"
             
             if '티엠 결과' in inflow_df.columns:
+                # 모든 가능한 티엠 결과 상태 정의
+                all_tm_results = ['', '부재중/재티엠', '티엠 예약', '장기']
+                
                 # 티엠 결과별 그룹화
                 tm_result_groups = inflow_df.groupby('티엠 결과')
                 
-                for tm_result, tm_group in tm_result_groups:
+                # 모든 상태에 대해 처리 (없는 상태는 0명으로 표시)
+                for tm_result in all_tm_results:
                     display_result = "신규" if tm_result == '' else tm_result
-                    result_message += f"**▶ {display_result}** ({len(tm_group)}명)\n"
                     
-                    # 이름 목록
-                    if '이름' in tm_group.columns:
-                        names = [name.strip() for name in tm_group['이름'].values if name.strip()]
+                    if tm_result in tm_result_groups.groups:
+                        # 해당 상태의 데이터가 있는 경우
+                        tm_group = tm_result_groups.get_group(tm_result)
+                        result_message += f"**▶ {display_result}** ({len(tm_group)}명)\n"
                         
-                        if names:
-                            # 이름이 많으면 줄바꿈해서 표시
-                            if len(names) > 8:
-                                # 8명씩 줄바꿈
-                                name_lines = []
-                                for i in range(0, len(names), 8):
-                                    batch = names[i:i+8]
-                                    name_lines.append(", ".join(batch))
-                                result_message += f"👤 {chr(10).join(name_lines)}\n\n"
+                        # 이름 목록
+                        if '이름' in tm_group.columns:
+                            names = [name.strip() for name in tm_group['이름'].values if name.strip()]
+                            
+                            if names:
+                                # 이름이 많으면 줄바꿈해서 표시
+                                if len(names) > 8:
+                                    # 8명씩 줄바꿈
+                                    name_lines = []
+                                    for i in range(0, len(names), 8):
+                                        batch = names[i:i+8]
+                                        name_lines.append(", ".join(batch))
+                                    result_message += f"👤 {chr(10).join(name_lines)}\n\n"
+                                else:
+                                    result_message += f"👤 {', '.join(names)}\n\n"
                             else:
-                                result_message += f"👤 {', '.join(names)}\n\n"
+                                result_message += "👤 (이름 정보 없음)\n\n"
                         else:
-                            result_message += "👤 (이름 정보 없음)\n\n"
+                            result_message += f"👤 {len(tm_group)}명 (이름 컬럼 없음)\n\n"
                     else:
-                        result_message += f"👤 {len(tm_group)}명 (이름 컬럼 없음)\n\n"
+                        # 해당 상태의 데이터가 없는 경우 (0명)
+                        result_message += f"**▶ {display_result}** (0명)\n\n"
             else:
                 result_message += "⚠️ '티엠 결과' 정보를 찾을 수 없습니다.\n"
             
